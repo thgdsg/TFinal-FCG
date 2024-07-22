@@ -1,0 +1,3 @@
+C:/TFinal-FCG/build/CMakeFiles/main.dir
+C:/TFinal-FCG/build/CMakeFiles/ALL_BUILD.dir
+C:/TFinal-FCG/build/CMakeFiles/ZERO_CHECK.dir
