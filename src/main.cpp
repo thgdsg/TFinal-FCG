@@ -318,6 +318,7 @@ int main()
             float field_of_view = 3.141592 / 3.0f;
             projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
         }
+        
         else
         {
             // Projeção Ortográfica.
