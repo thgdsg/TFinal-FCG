@@ -1,0 +1,18 @@
+# ninja log v5
+14	222	7433688230941353	CMakeFiles/main.dir/src/glad.c.obj	f0709b83ab18f7c6
+1157	1486	7433709613971562	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+8	614	7433688234850894	CMakeFiles/main.dir/src/textrendering.cpp.obj	8bc2c1af3cf3b439
+11	927	7433688237962567	CMakeFiles/main.dir/src/tiny_obj_loader.cpp.obj	5a9bce9b66c8d564
+3	1156	7433709612247963	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+3	1215	7435396845866762	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+1215	1856	7435396851362063	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+13	967	7435397177962101	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+968	1329	7435397180195852	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+12	1207	7435407822587651	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+1208	1564	7435407825236024	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+13	962	7435409279006576	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+963	1302	7435409280761878	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+12	935	7435409777954069	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+935	1240	7435409780188092	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
+3	909	7435439320313474	CMakeFiles/main.dir/src/main.cpp.obj	f23a597396927b93
+909	1227	7435439322028961	C:/Users/Leonardo/Desktop/lab4.1/bin/Debug/main.exe	41d0d1ab0702c531
