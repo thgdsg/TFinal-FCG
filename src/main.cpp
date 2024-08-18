@@ -132,6 +132,10 @@ GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // 
 void PrintObjModelInfo(ObjModel*); // Função para debugging
 void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
 void CriaMapa(GameMap& gameMap); // Função para criar o mapa
+void DrawTarget(const Target& target); // Função para desenhar um alvo
+void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
+glm::vec3 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
+bool IsTargetHit(const Target& target, const glm::vec3& worldPos);
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
@@ -197,6 +201,13 @@ bool g_LeftMouseButtonPressed = false;
 bool g_RightMouseButtonPressed = false; // Análogo para botão direito do mouse
 bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mouse
 
+// Variáveis globais que armazenam a última posição do cursor do mouse, para
+// que possamos calcular quanto que o mouse se movimentou entre dois instantes
+// de tempo. Utilizadas no callback CursorPosCallback() abaixo.
+double g_LastCursorPosX, g_LastCursorPosY;
+double g_LastClickTime = 0.0;
+const double CLICK_COOLDOWN = 0.5; // 0.5 seconds
+
 // Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
 // usuário através do mouse (veja função CursorPosCallback()). A posição
 // efetiva da câmera é calculada dentro da função main(), dentro do loop de
@@ -227,9 +238,15 @@ GLint g_model_uniform_crosshair;
 GLint g_view_uniform_crosshair;
 GLint g_projection_uniform_crosshair;
 
+// Lista de alvos
+std::vector<Target> targets;
 
 int main(int argc, char* argv[])
 {
+    // Criação de alguns alvos
+    targets.emplace_back(2.0f, 2.0f, 3.0f, 3, 10.0f);
+    targets.emplace_back(4.0f, 3.0f, 1.0f, 2, 15.0f);
+
     // Nova variável, velocidade
     float camera_speed = 4.0f;
     // Nova variável, tempo anterior
@@ -455,6 +472,20 @@ int main(int argc, char* argv[])
         glUniform1i(g_object_id_uniform, BUNNY);
         DrawVirtualObject("the_bunny");
 
+        // Remove alvos expirados
+        targets.erase(
+            std::remove_if(targets.begin(), targets.end(), [](const Target& target) {
+                return target.ShouldBeRemoved();
+            }),
+            targets.end()
+        );
+
+        // Renderiza os alvos
+        for (const auto& target : targets) {
+            if (target.IsAlive()) {
+                DrawTarget(target);
+            }
+        }
         /*model = Matrix_Translate(0.0f, -1.0f, 0.0f) * Matrix_Scale(50.0f, 50.0f, 50.0f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, PLANE);
@@ -503,6 +534,10 @@ int main(int argc, char* argv[])
 
         if(press_p)
             gameMap.PrintMap();
+
+        if(g_LeftMouseButtonPressed){
+            HandleMouseClick(window, g_LastCursorPosX, g_LastCursorPosY, view, projection);
+        }
 
         // Cálculo vx,vy,vz e aplicação no view vector
         float vx = cos(g_CameraPhi) * sin(g_CameraTheta);
@@ -1026,14 +1061,10 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
     g_ScreenRatio = (float)width / height;
 }
 
-// Variáveis globais que armazenam a última posição do cursor do mouse, para
-// que possamos calcular quanto que o mouse se movimentou entre dois instantes
-// de tempo. Utilizadas no callback CursorPosCallback() abaixo.
-double g_LastCursorPosX, g_LastCursorPosY;
-
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+    double currentTime = glfwGetTime(); // Tempo atual
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
@@ -1041,8 +1072,11 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // g_LastCursorPosY.  Também, setamos a variável
         // g_LeftMouseButtonPressed como true, para saber que o usuário está
         // com o botão esquerdo pressionado.
-        glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
-        g_LeftMouseButtonPressed = true;
+        if (currentTime - g_LastClickTime >= CLICK_COOLDOWN)
+        {
+            glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+            g_LeftMouseButtonPressed = true;
+        }
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
     {
@@ -1707,22 +1741,70 @@ void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection)
     glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // Itere sobre cada célula do GameMap
+    // Itera sobre cada célula do GameMap
     for (int y = 0; y < gameMap.GetHeight(); ++y) {
         for (int x = 0; x < gameMap.GetWidth(); ++x) {
             char cell = gameMap.GetCell(x, y);
             if (cell == '#') {
-                // Desenhe uma parede horizontal
+                // Desenha uma parede horizontal
                 DrawCell(x * 2, y * 2, 5.0f, 'H');
             } else if (cell == '@') {
-                // Desenhe uma parede vertical
+                // Desenha uma parede vertical
                 DrawCell(x * 2, y * 2, 5.0f, 'V');
             } else if (cell == '.') {
-                // Desenhe o chão
-                DrawCell(x * 2, y * 2, 1.0f, ' ');
+                // Desenha o chão
+                DrawCell(x * 2, y * 2, 2.0f, ' ');
             }
         }
     }
     // Desative o shader program se necessário
     glUseProgram(0);
+}
+
+// Função para desenhar o alvo
+void DrawTarget(const Target& target) {
+    if (target.IsAlive()) {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = Matrix_Translate(target.GetX(), target.GetY(), target.GetZ()) * Matrix_Scale(0.5f, 0.5f, 0.5f);
+        
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, SPHERE); 
+        DrawVirtualObject("the_sphere"); 
+    }
+}
+
+void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection) {
+    glm::vec3 worldPos = ScreenToWorld(window, xpos, ypos, view, projection);
+
+    for (auto& target : targets) {
+        if (IsTargetHit(target, worldPos)) {
+            target.Hit();
+            break;
+        }
+    }
+}
+
+glm::vec3 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection) {
+    int width, height;
+    glfwGetWindowSize(window, &width, &height);
+
+    float x = (2.0f * xpos) / width - 1.0f;
+    float y = 1.0f - (2.0f * ypos) / height;
+    float z = 1.0f;
+
+    glm::vec3 ray_nds(x, y, z);
+    glm::vec4 ray_clip(ray_nds.x, ray_nds.y, -1.0, 1.0);
+
+    glm::vec4 ray_eye = glm::inverse(projection) * ray_clip;
+    ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
+
+    glm::vec3 ray_wor = glm::vec3(glm::inverse(view) * ray_eye);
+    ray_wor = glm::normalize(ray_wor);
+
+    return ray_wor;
+}
+
+bool IsTargetHit(const Target& target, const glm::vec3& worldPos) {
+    float distance = glm::distance(glm::vec3(target.GetX(), target.GetY(), target.GetZ()), worldPos);
+    return distance < 4.0f;
 }
