@@ -1,3 +1,3 @@
-C:/TFinal-FCG/build/CMakeFiles/main.dir
-C:/TFinal-FCG/build/CMakeFiles/ALL_BUILD.dir
-C:/TFinal-FCG/build/CMakeFiles/ZERO_CHECK.dir
+C:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal/build/CMakeFiles/main.dir
+C:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal/build/CMakeFiles/ZERO_CHECK.dir

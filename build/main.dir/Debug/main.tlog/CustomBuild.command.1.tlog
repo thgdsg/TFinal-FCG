@@ -1,0 +1,10 @@
+^C:\USERS\THISA\ONEDRIVE\ÁREA DE TRABALHO\AULA\UFRGS\SEM5\FCG\TFINAL\CMAKELISTS.TXT
+setlocal
+C:\CMake\bin\cmake.exe "-SC:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal" "-BC:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal/build" --check-stamp-file "C:/Users/thisa/OneDrive/Área de Trabalho/aula/UFRGS/sem5/fcg/TFinal/build/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
