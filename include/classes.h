@@ -89,8 +89,8 @@ public:
     // Método para reduzir a vida do alvo quando ele é atingido
     void Hit() {
         if (health_ > 0) {
-            printf("AHHHHHHHH!\n");
             --health_;
+            printf("HP Left: %d\n", health_);
         }
     }
 

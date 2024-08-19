@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 
 // Headers abaixo são específicos de C++
 #include <map>
@@ -109,10 +110,7 @@ struct ObjModel
 void drawCrosshair(GLuint shaderProgram);
 void LoadCrosshairShader();
 
-// Função para renderizar o mapa
-void RenderMap(const GameMap& gameMap, GLuint shaderProgram);
-
-// Checa colisão do jogador com as bordas do mapa
+// Checa colisão do jogador com as bordas do mapa (AINDA NÃO IMPLEMENTADA)
 bool CheckCollisionWithMap(const GameMap& gameMap, float playerX, float playerZ);
 
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
@@ -134,8 +132,9 @@ void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection)
 void CriaMapa(GameMap& gameMap); // Função para criar o mapa
 void DrawTarget(const Target& target); // Função para desenhar um alvo
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
-glm::vec3 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
-bool IsTargetHit(const Target& target, const glm::vec3& worldPos);
+glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
+bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir);
+void SpawnTarget();
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
@@ -206,7 +205,9 @@ bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mous
 // de tempo. Utilizadas no callback CursorPosCallback() abaixo.
 double g_LastCursorPosX, g_LastCursorPosY;
 double g_LastClickTime = 0.0;
-const double CLICK_COOLDOWN = 0.5; // 0.5 seconds
+const double DMG_COOLDOWN = 0.1;
+double lastSpawnTime = 0.0;
+double lastShotTime = 0.0;
 
 // Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
 // usuário através do mouse (veja função CursorPosCallback()). A posição
@@ -422,13 +423,13 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -20.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
             // Projeção Perspectiva.
             // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
-            float field_of_view = 3.141592 / 3.0f;
+            float field_of_view = 3.141592 / 2.5f;
             projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
         }
         else
@@ -510,6 +511,16 @@ int main(int argc, char* argv[])
         // Direção (para normalizar o movimento diagonal)
         glm::vec4 direction(0.0f);
 
+        // Verifica se 5 segundos se passaram
+        if (current_time - lastSpawnTime >= 5.0)
+        {
+            // Chame a função SpawnTarget
+            SpawnTarget();
+
+            // Atualize o tempo da última chamada
+            lastSpawnTime = current_time;
+        }
+
         if(PRESS_W)
             direction += -w_vector;
         if(PRESS_S)
@@ -536,7 +547,10 @@ int main(int argc, char* argv[])
             gameMap.PrintMap();
 
         if(g_LeftMouseButtonPressed){
-            HandleMouseClick(window, g_LastCursorPosX, g_LastCursorPosY, view, projection);
+            if (current_time - lastShotTime >= 0.5) {
+                lastShotTime = current_time;
+                HandleMouseClick(window, g_LastCursorPosX, g_LastCursorPosY, view, projection);
+            }
         }
 
         // Cálculo vx,vy,vz e aplicação no view vector
@@ -1064,7 +1078,6 @@ void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    double currentTime = glfwGetTime(); // Tempo atual
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
@@ -1072,11 +1085,8 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
         // g_LastCursorPosY.  Também, setamos a variável
         // g_LeftMouseButtonPressed como true, para saber que o usuário está
         // com o botão esquerdo pressionado.
-        if (currentTime - g_LastClickTime >= CLICK_COOLDOWN)
-        {
-            glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
-            g_LeftMouseButtonPressed = true;
-        }
+        glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+        g_LeftMouseButtonPressed = true;
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
     {
@@ -1774,22 +1784,23 @@ void DrawTarget(const Target& target) {
 }
 
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection) {
-    glm::vec3 worldPos = ScreenToWorld(window, xpos, ypos, view, projection);
+    glm::vec4 rayDirection = ScreenToWorld(window, xpos, ypos, view, projection);
+    glm::vec4 cameraPosition = glm::inverse(view)[3];
 
     for (auto& target : targets) {
-        if (IsTargetHit(target, worldPos)) {
+        if (IsTargetHit(target, cameraPosition, rayDirection)) {
             target.Hit();
             break;
         }
     }
 }
 
-glm::vec3 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection) {
+glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection) {
     int width, height;
     glfwGetWindowSize(window, &width, &height);
 
-    float x = (2.0f * xpos) / width - 1.0f;
-    float y = 1.0f - (2.0f * ypos) / height;
+    float x = (2.0f * static_cast<float>(xpos)) / width - 1.0f;
+    float y = 1.0f - (2.0f * static_cast<float>(ypos)) / height;
     float z = 1.0f;
 
     glm::vec3 ray_nds(x, y, z);
@@ -1798,13 +1809,44 @@ glm::vec3 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 
     glm::vec4 ray_eye = glm::inverse(projection) * ray_clip;
     ray_eye = glm::vec4(ray_eye.x, ray_eye.y, -1.0, 0.0);
 
-    glm::vec3 ray_wor = glm::vec3(glm::inverse(view) * ray_eye);
-    ray_wor = glm::normalize(ray_wor);
+    glm::vec4 ray_wor = glm::vec4(glm::inverse(view) * ray_eye);
+    ray_wor = ray_wor/norm(ray_wor);
 
     return ray_wor;
 }
 
-bool IsTargetHit(const Target& target, const glm::vec3& worldPos) {
-    float distance = glm::distance(glm::vec3(target.GetX(), target.GetY(), target.GetZ()), worldPos);
-    return distance < 4.0f;
+bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir) {
+    glm::vec4 targetPos(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
+    glm::vec4 toTarget = targetPos - cameraPos;
+    glm::vec4 normRayDir = rayDir/norm(rayDir);
+
+    float t = dotproduct(toTarget, normRayDir);
+    glm::vec4 closestPoint = cameraPos + t * normRayDir;
+
+    glm::vec4 diff = targetPos - closestPoint;
+    float distanceSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+
+    return distanceSq < 0.5f;
+}
+
+// Função para gerar um número float aleatório entre min e max em intervalos de 0.5
+float RandomFloat(float min, float max) {
+    int range = static_cast<int>((max - min) * 2) + 1;
+    return min + (rand() % range) * 0.5f;
+}
+
+// Função para spawnar um alvo em uma posição aleatória
+void SpawnTarget() {
+    srand(static_cast<unsigned int>(time(0)));
+
+    // Gera coordenadas aleatórias para x e z
+    float x = RandomFloat(-5.0f, 5.0f);
+    float z = RandomFloat(-5.0f, 5.0f);
+    float y = 2.0f; // Altura fixa
+
+    // Cria um novo alvo
+    Target newTarget(x, y, z, 1, 10);
+
+    // Adiciona o novo alvo à lista de alvos
+    targets.push_back(newTarget);
 }
