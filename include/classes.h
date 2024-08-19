@@ -40,6 +40,10 @@ public:
         }
         return ' ';
     }
+    
+    bool IsValidPosition(int x, int y) const {
+        return x >= 0 && x < width_ && y >= 0 && y < height_;
+    }
 
     int GetWidth() const { return width_; }
     int GetHeight() const { return height_; }
@@ -48,10 +52,6 @@ private:
     int width_;
     int height_;
     std::vector<char> map_;
-
-    bool IsValidPosition(int x, int y) const {
-        return x >= 0 && x < width_ && y >= 0 && y < height_;
-    }
 };
 
 class Target {
@@ -99,4 +99,20 @@ private:
     int health_; // Vida
     float lifetime_; // Tempo de vida em segundos
     std::chrono::steady_clock::time_point creation_time_; // Tempo de criação do alvo
+};
+
+class Player {
+public:
+    Player() : score_(0) {}
+
+    Player(int score) : score_(score) {}
+
+    int getScore() const { return score_; }
+
+    void addScore(int points) { score_ += points; }
+
+    void resetScore() { score_ = 0; }
+
+private:
+    int score_;
 };

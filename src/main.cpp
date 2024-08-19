@@ -133,7 +133,7 @@ void CriaMapa(GameMap& gameMap); // Função para criar o mapa
 void DrawTarget(const Target& target); // Função para desenhar um alvo
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
-bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir);
+bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir, glm::mat4 view, glm::mat4 projection);
 void SpawnTarget();
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
@@ -239,8 +239,9 @@ GLint g_model_uniform_crosshair;
 GLint g_view_uniform_crosshair;
 GLint g_projection_uniform_crosshair;
 
-// Lista de alvos
+// alvos
 std::vector<Target> targets;
+Player jogador;
 
 int main(int argc, char* argv[])
 {
@@ -293,7 +294,7 @@ int main(int argc, char* argv[])
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
     // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - Trabalho Final", NULL, NULL);
+    window = glfwCreateWindow(1600, 900, "INF01047 - Trabalho Final", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -323,7 +324,7 @@ int main(int argc, char* argv[])
     // redimensionada, por consequência alterando o tamanho do "framebuffer"
     // (região de memória onde são armazenados os pixels da imagem).
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
+    FramebufferSizeCallback(window, 1600, 900); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
 
     // Imprimimos no terminal informações sobre a GPU do sistema
     const GLubyte *vendor      = glGetString(GL_VENDOR);
@@ -534,6 +535,7 @@ int main(int argc, char* argv[])
         if ((norm(direction) * norm(direction)) > 0.0f) {
             direction /= norm(direction);
         }
+        direction.y = 0.0f;
 
         // Atualiza a posição da câmera, considerando o botão shift
         if(!PRESS_SHIFT){
@@ -1788,7 +1790,7 @@ void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 vi
     glm::vec4 cameraPosition = glm::inverse(view)[3];
 
     for (auto& target : targets) {
-        if (IsTargetHit(target, cameraPosition, rayDirection)) {
+        if (IsTargetHit(target, cameraPosition, rayDirection, view, projection)) {
             target.Hit();
             break;
         }
@@ -1815,18 +1817,25 @@ glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 
     return ray_wor;
 }
 
-bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir) {
+bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir, glm::mat4 view, glm::mat4 projection) {
     glm::vec4 targetPos(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
-    glm::vec4 toTarget = targetPos - cameraPos;
-    glm::vec4 normRayDir = rayDir/norm(rayDir);
 
-    float t = dotproduct(toTarget, normRayDir);
-    glm::vec4 closestPoint = cameraPos + t * normRayDir;
+    // Transform target position to clip space
+    glm::vec4 clipSpacePos = projection * view * targetPos;
 
-    glm::vec4 diff = targetPos - closestPoint;
-    float distanceSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
+    // Perform perspective divide to get normalized device coordinates (NDC)
+    glm::vec3 ndcSpacePos = glm::vec3(clipSpacePos) / clipSpacePos.w;
 
-    return distanceSq < 0.5f;
+    // Calculate the distance from the center of the screen in NDC
+    glm::vec2 ndcCenter = glm::vec2(0.0f, 0.0f); // Center of the screen in NDC is (0, 0)
+    glm::vec2 targetNDCPos = glm::vec2(ndcSpacePos.x, ndcSpacePos.y);
+    float dx = targetNDCPos.x - ndcCenter.x;
+    float dy = targetNDCPos.y - ndcCenter.y;
+    float distance = sqrt(dx * dx + dy * dy);
+
+    printf("Distance from NDC center: %f\n", distance);
+
+    return distance < 0.1f;
 }
 
 // Função para gerar um número float aleatório entre min e max em intervalos de 0.5
