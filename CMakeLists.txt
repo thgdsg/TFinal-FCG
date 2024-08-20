@@ -10,7 +10,7 @@ set(SOURCES
   src/textrendering.cpp
   src/tiny_obj_loader.cpp
   src/glad.c
-)
+ "src/stb_image.cpp")
 
 cmake_minimum_required(VERSION 3.5.0)
 
@@ -53,7 +53,7 @@ Por favor, atualize a lista de arquivos fonte no arquivo CMakeLists.txt.")
   endif()
 endforeach()
 
-add_executable(${EXECUTABLE_NAME} ${SOURCES})
+add_executable(${EXECUTABLE_NAME} ${SOURCES} "include/stb_image.h" "src/stb_image.cpp")
 
 target_include_directories(${EXECUTABLE_NAME} BEFORE PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
