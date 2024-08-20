@@ -144,7 +144,7 @@ void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 vi
 glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir, glm::mat4 view, glm::mat4 projection);
 void SpawnTarget();
-
+void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec4 camera_position_c);
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
@@ -497,31 +497,9 @@ int main(int argc, char* argv[])
                 DrawTarget(target);
             }
         }
-        // Desenhamos o modelo da arma
-        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
-        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
 
-        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
-        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
-        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
-        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
-
-        glm::mat4 rotation_matrix = glm::mat4(
-            glm::vec4(right, 0.0f),
-            glm::vec4(up, 0.0f),
-            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
-            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
-        );
-
-        model = Matrix_Identity() *
-                Matrix_Translate(object_position.x, object_position.y, object_position.z) *
-                rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
-                Matrix_Scale(0.025, 0.025, 0.025);
-
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, GUN);
-        DrawVirtualObject("AWP");
-
+        RenderGun(camera_up_vector, camera_view_vector, camera_position_c);
+       
         
         RenderGameMap(gameMap, view, projection);
         
@@ -1837,6 +1815,33 @@ void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
     glUseProgram(0);
 }
 
+// Função para renderizar a arma
+void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec4 camera_position_c){
+    // Desenhamos o modelo da arma
+        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
+        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
+
+        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
+        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
+        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
+        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
+
+        glm::mat4 rotation_matrix = glm::mat4(
+            glm::vec4(right, 0.0f),
+            glm::vec4(up, 0.0f),
+            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
+            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+
+        glm::mat4 model = Matrix_Identity() *
+                            Matrix_Translate(object_position.x, object_position.y, object_position.z) *
+                            rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                            Matrix_Scale(0.025, 0.025, 0.025);
+
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, GUN);
+        DrawVirtualObject("AWP");
+}
 // Função para desenhar o alvo
 void DrawTarget(const Target& target) {
     if (target.IsAlive()) {
