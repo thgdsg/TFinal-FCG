@@ -22,6 +22,7 @@ uniform mat4 projection;
 #define SPHERE 0
 #define SPHERE_PARADA  1
 #define PLANE  2
+#define GUN 3
 
 uniform int object_id;
 
@@ -34,6 +35,7 @@ uniform vec4 bbox_max;
 uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
+uniform sampler2D TextureImage3;
 
 
 
@@ -156,6 +158,13 @@ void main()
 
         color.rgb = Kd1 * (lambert + 0.15);
     
+    }
+    else if(object_id == GUN){
+        U = texcoords.x;
+        V = texcoords.y;
+
+         vec3 Kd1 = texture(TextureImage3, vec2(U,V)).rgb;
+         color.rgb = Kd1 * (lambert + 0.15);
     }
 
 

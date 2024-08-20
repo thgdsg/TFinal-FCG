@@ -360,6 +360,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/teste_chao.jpg");      // TextureImage0
     LoadTextureImage("../../data/target_movimento.jpg");      // TextureImage1
     LoadTextureImage("../../data/target_parado.jpg");      // TextureImage2
+    LoadTextureImage("../../data/Color.bmp");  //TextureImage3
 
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
@@ -372,7 +373,10 @@ int main(int argc, char* argv[])
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
-
+    ObjModel awpmodel("../../data/AWP_Dragon_Lore.obj");
+    ComputeNormals(&awpmodel);
+    BuildTrianglesAndAddToVirtualScene(&awpmodel);
+    
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -439,8 +443,8 @@ int main(int argc, char* argv[])
 
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
-        float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -20.0f; // Posição do "far plane"
+        float nearplane = -0.01f;  // Posição do "near plane"
+        float farplane  = -30.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -474,6 +478,7 @@ int main(int argc, char* argv[])
         #define SPHERE 0
         #define SPHERE_PARADA 1
         #define PLANE  2
+        #define GUN 3
         
         // Remove alvos expirados
         targets.erase(
@@ -492,11 +497,32 @@ int main(int argc, char* argv[])
                 DrawTarget(target);
             }
         }
-        /*model = Matrix_Translate(0.0f, -1.0f, 0.0f) * Matrix_Scale(50.0f, 50.0f, 50.0f);
+        // Desenhamos o modelo da arma
+        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
+        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
+
+        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
+        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
+        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
+        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
+
+        glm::mat4 rotation_matrix = glm::mat4(
+            glm::vec4(right, 0.0f),
+            glm::vec4(up, 0.0f),
+            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
+            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+
+        model = Matrix_Identity() *
+                Matrix_Translate(object_position.x, object_position.y, object_position.z) *
+                rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                Matrix_Scale(0.025, 0.025, 0.025);
+
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
-        DrawVirtualObject("the_plane");*/
-        //Desenhamos o modelo da arma
+        glUniform1i(g_object_id_uniform, GUN);
+        DrawVirtualObject("AWP");
+
+        
         RenderGameMap(gameMap, view, projection);
         
         // Copiado do FAQ
@@ -761,6 +787,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage0"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage3"), 3);
     glUseProgram(0);
 }
 
