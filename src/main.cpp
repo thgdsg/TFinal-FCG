@@ -48,6 +48,8 @@
 #include "utils.h"
 #include "matrices.h"
 #include "classes.h"
+#include <iostream>
+#include <iomanip>
 
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
@@ -136,8 +138,7 @@ GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
 void LoadShader(const char* filename, GLuint shader_id); // Função utilizada pelas duas acima
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
-void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
-void CriaMapa(GameMap& gameMap); // Função para criar o mapa
+void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
 void DrawTarget(const Target& target); // Função para desenhar um alvo
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
@@ -279,8 +280,7 @@ int main(int argc, char* argv[])
     float jump_force = 5.0f;
 
     // Criação do GameMap
-    GameMap gameMap(10, 10);
-    CriaMapa(gameMap);
+    GameMap gameMap;
 
 
     // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
@@ -574,9 +574,7 @@ int main(int argc, char* argv[])
         else{
             camera_position_c += (camera_speed/2.0f) * delta_t * direction;
         }
-
-        if(press_p)
-            gameMap.PrintMap();
+    
 
         if(g_LeftMouseButtonPressed){
             if (current_time - lastShotTime >= 0.5) {
@@ -1819,69 +1817,22 @@ void drawCrosshair(GLuint shaderProgram) {
     glBindVertexArray(0);
 
 }
-// set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
-// vim: set spell spelllang=pt_br :
-
-void CriaMapa(GameMap& gameMap){
-    // Mapa do jogo (ex. para nosso jogo)
-    for (int i = 0; i < 10; i++) {
-            gameMap.AddWall(i, 0, 'H');
-        }
-    for (int i = 1; i < 10; i++) {
-            gameMap.AddWall(i, 9, 'H');
-        }
-    for (int j = 1; j < 10; j++) {
-        gameMap.AddWall(0, j, 'V');
-    }
-    for (int j = 1; j < 10; j++) {
-        gameMap.AddWall(9, j, 'V');
-    }
-    for (int i = 1; i < 9; i++) {
-        for (int j = 1; j < 9; j++) {
-            gameMap.AddFloor(i, j);
-        }
-    }
-}
-
-// Função para desenhar o chão ou parede
-void DrawCell(float x, float y, float size, char direction) {
-    glm::mat4 model = glm::mat4(1.0f);
-    model = Matrix_Translate(x - 5.0f, 0.0f, y - 5.0f) * Matrix_Scale(size, size, size);
-
-    if (direction == 'H') {
-        model *= Matrix_Rotate_Z(3.141592f/2) * Matrix_Rotate_Y(0) * Matrix_Rotate_X(3.141592f/2);
-    } else if (direction == 'V') {
-        model *= Matrix_Rotate_Z(3.141592f/2) * Matrix_Rotate_Y(0) * Matrix_Rotate_X(3.141592f);
-    }
-    
-    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, PLANE);
-    DrawVirtualObject("the_plane");
-}
 
 // Função para renderizar o mapa
-void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
+void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
     glUseProgram(g_GpuProgramID_obj);
-
     glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // Itera sobre cada célula do GameMap
-    for (int y = 0; y < gameMap.GetHeight(); ++y) {
-        for (int x = 0; x < gameMap.GetWidth(); ++x) {
-            char cell = gameMap.GetCell(x, y);
-            if (cell == '#') {
-                // Desenha uma parede horizontal
-                DrawCell(x * 2, y * 2, 5.0f, 'H');
-            } else if (cell == '@') {
-                // Desenha uma parede vertical
-                DrawCell(x * 2, y * 2, 5.0f, 'V');
-            } else if (cell == '.') {
-                // Desenha o chão
-                DrawCell(x * 2, y * 2, 2.0f, ' ');
-            }
-        }
+     std::vector<glm::mat4> modelos = gameMap.getModels();
+
+    for(glm::mat4 model : modelos){
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, PLANE);
+        DrawVirtualObject("the_plane");
     }
+
+
     // Desative o shader program se necessário
     glUseProgram(0);
 }
