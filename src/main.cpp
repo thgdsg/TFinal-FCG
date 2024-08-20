@@ -120,6 +120,7 @@ void LoadTextureImage(const char* filename);
 
 // Checa colisão do jogador com as bordas do mapa
 bool CheckCollisionWithMap(const GameMap& gameMap, float playerX, float playerZ);
+bool CheckCollisionWithSphere(const glm::vec4& cameraPos, const Target& target);
 
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
@@ -360,6 +361,7 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/teste_chao.jpg");      // TextureImage0
     LoadTextureImage("../../data/target_movimento.jpg");      // TextureImage1
     LoadTextureImage("../../data/target_parado.jpg");      // TextureImage2
+    LoadTextureImage("../../data/Color.bmp");  //TextureImage3
 
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
@@ -372,7 +374,10 @@ int main(int argc, char* argv[])
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
-
+    ObjModel awpmodel("../../data/AWP_Dragon_Lore.obj");
+    ComputeNormals(&awpmodel);
+    BuildTrianglesAndAddToVirtualScene(&awpmodel);
+    
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -439,8 +444,8 @@ int main(int argc, char* argv[])
 
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
-        float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -20.0f; // Posição do "far plane"
+        float nearplane = -0.01f;  // Posição do "near plane"
+        float farplane  = -30.0f; // Posição do "far plane"
 
         if (g_UsePerspectiveProjection)
         {
@@ -474,6 +479,7 @@ int main(int argc, char* argv[])
         #define SPHERE 0
         #define SPHERE_PARADA 1
         #define PLANE  2
+        #define GUN 3
         
         // Remove alvos expirados
         targets.erase(
@@ -491,12 +497,43 @@ int main(int argc, char* argv[])
                 }
                 DrawTarget(target);
             }
+            if (CheckCollisionWithSphere(camera_position_c, target)) {
+                // Calcule a direção oposta à colisão
+                glm::vec4 posicao_target = glm::vec4(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
+                glm::vec4 direction = (camera_position_c - posicao_target)/(norm(camera_position_c - posicao_target));
+                
+                // Mova a câmera na direção oposta até que não haja mais colisão
+                while (CheckCollisionWithSphere(camera_position_c, target)) {
+                    camera_position_c += glm::vec4(direction.x * 0.01f, direction.y * 0.01f, direction.z * 0.01f, 0.0f); // Ajuste o valor 0.01f conforme necessário
+                }
+            }
         }
-        /*model = Matrix_Translate(0.0f, -1.0f, 0.0f) * Matrix_Scale(50.0f, 50.0f, 50.0f);
+        // Desenhamos o modelo da arma
+        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
+        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
+
+        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
+        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
+        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
+        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
+
+        glm::mat4 rotation_matrix = glm::mat4(
+            glm::vec4(right, 0.0f),
+            glm::vec4(up, 0.0f),
+            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
+            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+
+        model = Matrix_Identity() *
+                Matrix_Translate(object_position.x, object_position.y, object_position.z) *
+                rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                Matrix_Scale(0.025, 0.025, 0.025);
+
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
-        DrawVirtualObject("the_plane");*/
-        //Desenhamos o modelo da arma
+        glUniform1i(g_object_id_uniform, GUN);
+        DrawVirtualObject("AWP");
+
+        
         RenderGameMap(gameMap, view, projection);
         
         // Copiado do FAQ
@@ -548,6 +585,10 @@ int main(int argc, char* argv[])
         else{
             camera_position_c += (camera_speed/2.0f) * delta_t * direction;
         }
+
+        jogador.setX(camera_position_c.x);
+        jogador.setY(camera_position_c.y);
+        jogador.setZ(camera_position_c.z);
 
         if(press_p)
             gameMap.PrintMap();
@@ -761,6 +802,7 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage0"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage3"), 3);
     glUseProgram(0);
 }
 
@@ -1944,7 +1986,7 @@ void SpawnTarget() {
     // Gera coordenadas aleatórias para x e z
     float x = RandomFloat(-5.0f, 5.0f);
     float z = RandomFloat(-5.0f, 5.0f);
-    float y = 2.0f; // Altura fixa
+    float y = 1.0f; // Altura fixa
 
     // Cria um novo alvo
     Target newTarget(x, y, z, 1, 10,1,0);

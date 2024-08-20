@@ -10,6 +10,7 @@ set(SOURCES
   src/textrendering.cpp
   src/tiny_obj_loader.cpp
   src/glad.c
+  src/collisions.cpp
  "src/stb_image.cpp")
 
 cmake_minimum_required(VERSION 3.5.0)

@@ -157,9 +157,17 @@ private:
 
 class Player {
 public:
-    Player() : score_(0) {}
+    Player() : x_(0), y_(0), z_(0), score_(0) {}
 
-    Player(int score) : score_(score) {}
+    Player(float x, float y, float z, int score) : x_(x), y_(y), z_(z), score_(score) {}
+
+    float getX() const { return x_; }
+    float getY() const { return y_; }
+    float getZ() const { return z_; }
+
+    void setX(float x) { x_ = x; }
+    void setY(float y) { y_ = y; }
+    void setZ(float z) { z_ = z; }
 
     int getScore() const { return score_; }
 
@@ -168,5 +176,6 @@ public:
     void resetScore() { score_ = 0; }
 
 private:
-    int score_;
+    float x_, y_, z_; // Posição no mundo
+    int score_; // Pontuação do jogador
 };
