@@ -1,3 +1,0 @@
-C:/Users/Leonardo/Desktop/fcg-trab/out/build/x64-Debug/CMakeFiles/main.dir
-C:/Users/Leonardo/Desktop/fcg-trab/out/build/x64-Debug/CMakeFiles/edit_cache.dir
-C:/Users/Leonardo/Desktop/fcg-trab/out/build/x64-Debug/CMakeFiles/rebuild_cache.dir

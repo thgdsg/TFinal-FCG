@@ -30,6 +30,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <iostream>
+#include <iomanip>
+#include <mutex>
 
 // Headers das bibliotecas OpenGL
 #include <glad/glad.h>   // Criação de contexto OpenGL 3.3
@@ -48,9 +51,6 @@
 #include "utils.h"
 #include "matrices.h"
 #include "classes.h"
-#include <iostream>
-#include <iomanip>
-
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -110,64 +110,18 @@ struct ObjModel
     }
 };
 
-bool CheckCollisionWithSphere(const glm::vec4& cameraPos, const Target& target) {
-    // Calcular a diferença entre os componentes dos vetores
-    float dx = cameraPos.x - target.GetX();
-    float dy = cameraPos.y - target.GetY();
-    float dz = cameraPos.z - target.GetZ();
-
-    // Calcular a distância euclidiana
-    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-    // Verificar se a distância é menor ou igual a 0.5
-    return distance <= 1;
-}
-
-// Função para detectar colisão da câmera com as paredes do cenário
-bool CheckCollisionWithWorld(const glm::vec4& cameraPosition) {
-    const float minX = -6.8f;
-    const float maxX = 6.8f;
-    const float minZ = -6.8f;
-    const float maxZ = 6.8f;
-
-    if (cameraPosition.x < minX || cameraPosition.x > maxX ||
-        cameraPosition.z < minZ || cameraPosition.z > maxZ) {
-        return true; // Colisão detectada
-    }
-    return false; // Nenhuma colisão detectada
-}
-
-// Função para detectar colisão de um Target com as paredes do cenário
-bool CheckTargetCollisionWithWorld(const Target& target) {
-    // Definir os limites do cenário
-    const float minX = -6.8f;
-    const float maxX = 6.8f;
-    const float minZ = -6.8f;
-    const float maxZ = 6.8f;
-
-    // Verificar se a posição do Target está fora dos limites do cenário
-    if (target.GetX() - 0.5f < minX || target.GetX() + 0.5f > maxX ||
-        target.GetZ() - 0.5f < minZ || target.GetZ() + 0.5f > maxZ) {
-        return true; // Colisão detectada
-    }
-    return false; // Nenhuma colisão detectada
-}
-
 //  Função para desenhar o crosshair
 void drawCrosshair(GLuint shaderProgram);
 void LoadCrosshairShader();
 
-// Função para renderizar o mapa
-void RenderMap(const GameMap& gameMap, GLuint shaderProgram);
-
 // Carrega Texturas
 void LoadTextureImage(const char* filename);
 
-// Checa colisão do jogador com as bordas do mapa
-bool CheckCollisionWithMap(const GameMap& gameMap, float playerX, float playerZ);
+// Colisões
 bool CheckCollisionWithSphere(const glm::vec4& cameraPos, const Target& target);
 bool CheckCollisionWithWorld(const glm::vec4& cameraPosition);
-bool CheckTargetCollisionWithWorld(const Target& target);
+bool CheckSphereCollisionWithSphere(const Target& target1, const Target& target2);
+
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
@@ -212,9 +166,6 @@ void TextRendering_PrintMatrixVectorProductDivW(GLFWwindow* window, glm::mat4 M,
 
 // Funções abaixo renderizam como texto na janela OpenGL algumas matrizes e
 // outras informações do programa. Definidas após main().
-void TextRendering_ShowModelViewProjection(GLFWwindow* window, glm::mat4 projection, glm::mat4 view, glm::mat4 model, glm::vec4 p_model);
-void TextRendering_ShowEulerAngles(GLFWwindow* window);
-void TextRendering_ShowProjection(GLFWwindow* window);
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
 
 // Funções callback para comunicação com o sistema operacional e interação do
@@ -275,6 +226,7 @@ double lastSpawnTime2 = 0.0;
 double lastShotTime = 0.0;
 int countdownTime = 60;
 auto startTime = std::chrono::steady_clock::now();
+std::mutex spawnMutex;
 
 // Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
 // usuário através do mouse (veja função CursorPosCallback()). A posição
@@ -287,9 +239,9 @@ float g_CameraDistance = 3.5f; // Distância da câmera para a origem
 // Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
 bool g_UsePerspectiveProjection = true;
 bool g_ThirdPersonCamera = false;
-
-// Variável que controla se o texto informativo será mostrado na tela.
-bool g_ShowInfoText = true;
+bool g_Fullscreen = false;
+GLFWmonitor* g_Monitor = nullptr;
+int g_WindowPosX, g_WindowPosY, g_WindowWidth, g_WindowHeight;
 
 //variavel que controla o movimento
 bool PRESS_W = false, PRESS_A = false, PRESS_S = false, PRESS_D = false, PRESS_SHIFT = false, PRESS_R = false;
@@ -318,10 +270,6 @@ Player jogador;
  //pontuacao
 int main(int argc, char* argv[])
 {
-    // Criação de alguns alvos
-    targets.emplace_back(2.0f, 2.0f, 3.0f, 1, 10.0f,2,0);
-    targets.emplace_back(4.0f, 3.0f, 1.0f, 1, 15.0f,2,1);
-
     // Nova variável, velocidade
     float camera_speed = 4.0f;
     // Nova variável, tempo anterior
@@ -505,7 +453,7 @@ int main(int argc, char* argv[])
 
             // Calcule a posição da câmera em terceira pessoa
             camera_position_third_person = camera_position_c - third_person_distance * (camera_view_vector/norm(camera_view_vector));
-            camera_position_third_person.y += 1.0f; // Ajuste a altura da câmera em terceira pessoa
+            camera_position_third_person.y += 0.5f; // Ajuste a altura da câmera em terceira pessoa
             camera_position_third_person.x -= 0.5f; 
             // Verifique se a câmera está abaixo da altura mínima permitida
             if (camera_position_third_person.y < 0.5f)
@@ -575,24 +523,26 @@ int main(int argc, char* argv[])
                         camera_position_c += glm::vec4(direction.x * 0.01f, direction.y * 0.01f, direction.z * 0.01f, 0.0f); // Ajuste o valor 0.01f conforme necessário
                     }
                 }
-            }
-            if(CheckTargetCollisionWithWorld(target)){
-                // Empurrar o Target na direção oposta à colisão
-                float pushDistance = 0.5f;
-
-                // Verificar em qual direção o Target está colidindo e empurrá-lo na direção oposta
-                if (target.GetX() - 0.5f < -6.8f) {
-                    target.SetX(-6.8f + 0.5f + pushDistance);
-                } else if (target.GetX() + 0.5f > 6.8f) {
-                    target.SetX(6.8f - 0.5f - pushDistance);
+                // Verifica colisão entre targets e separa-os
+                for (auto& target2 : targets) {
+                    if (&target != &target2 && target2.IsAlive()) {
+                        if (CheckSphereCollisionWithSphere(target, target2)) {
+                            // Calcule a direção oposta à colisão
+                            glm::vec4 posicao_target1 = glm::vec4(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
+                            glm::vec4 posicao_target2 = glm::vec4(target2.GetX(), target2.GetY(), target2.GetZ(), 1.0f);
+                            glm::vec4 direction = (posicao_target2 - posicao_target1) / glm::length(posicao_target2 - posicao_target1);
+                            
+                            // Mova o target2 na direção oposta até que não haja mais colisão
+                            while (CheckSphereCollisionWithSphere(target, target2)) {
+                                target2.SetX(target2.GetX() + direction.x * 0.1f);
+                                target2.SetY(target2.GetY() + direction.y * 0.1f);
+                                target2.SetZ(target2.GetZ() + direction.z * 0.1f); // Ajuste o valor 0.01f conforme necessário
+                            }
+                        }
+                    }
                 }
-
-                if (target.GetZ() - 0.5f < -6.8f) {
-                    target.SetZ(-6.8f + 0.5f + pushDistance);
-                } else if (target.GetZ() + 0.5f > 6.8f) {
-                    target.SetZ(6.8f - 0.5f - pushDistance);
-                }
             }
+
         }
 
         RenderGun(camera_up_vector, camera_view_vector, camera_position_c);
@@ -620,6 +570,7 @@ int main(int argc, char* argv[])
             // Verifica se 5 segundos se passaram
             if (current_time - lastSpawnTime >= RandomFloat(2.0f, 4.0f))
             {
+                std::lock_guard<std::mutex> lock(spawnMutex);
                 // Chame a função SpawnTarget
                 SpawnTarget();
 
@@ -628,6 +579,7 @@ int main(int argc, char* argv[])
             }
             if (current_time - lastSpawnTime2 >= RandomFloat(6.0f, 10.0f))
             {
+                std::lock_guard<std::mutex> lock(spawnMutex);
                 // Chame a função SpawnTarget
                 SpawnTarget_mov();
 
@@ -699,13 +651,6 @@ int main(int argc, char* argv[])
         float newPlayerX = camera_position_c.x + camera_velocity.x * delta_t;
         float newPlayerY = camera_position_c.y + camera_velocity.y * delta_t;
         float newPlayerZ = camera_position_c.z + camera_velocity.z * delta_t;
-
-        // Imprimimos na tela os ângulos de Euler que controlam a rotação do
-        // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
-
-        // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-        TextRendering_ShowProjection(window);
 
         // Imprimimos na tela informação sobre o número de quadros renderizados
         // por segundo (frames per second).
@@ -1430,21 +1375,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
             press_space = false;
     }
 
-    // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
-    if (key == GLFW_KEY_H && action == GLFW_PRESS)
-    {
-        g_ShowInfoText = !g_ShowInfoText;
-    }
-
-    // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
-    if (key == GLFW_KEY_R && action == GLFW_PRESS)
-    {
-        LoadShadersFromFiles();
-        fprintf(stdout,"Shaders recarregados!\n");
-        fflush(stdout);
-    }
-
-    //controles de movimentdo da camera
+    //controles de movimento da camera
     if (key == GLFW_KEY_W && action == GLFW_PRESS)
     {
         PRESS_W = true;
@@ -1468,6 +1399,29 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_R && action == GLFW_PRESS)
     {
         PRESS_R = true;
+    }
+    if (key == GLFW_KEY_F && action == GLFW_PRESS)
+    {
+        g_Fullscreen = !g_Fullscreen;
+
+        if (g_Fullscreen)
+        {
+            // Save the current window position and size
+            glfwGetWindowPos(window, &g_WindowPosX, &g_WindowPosY);
+            glfwGetWindowSize(window, &g_WindowWidth, &g_WindowHeight);
+
+            // Get the primary monitor and its video mode
+            g_Monitor = glfwGetPrimaryMonitor();
+            const GLFWvidmode* mode = glfwGetVideoMode(g_Monitor);
+
+            // Set the window to fullscreen
+            glfwSetWindowMonitor(window, g_Monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+        }
+        else
+        {
+            // Restore the window to its previous position and size
+            glfwSetWindowMonitor(window, nullptr, g_WindowPosX, g_WindowPosY, g_WindowWidth, g_WindowHeight, 0);
+        }
     }
 
     //ve se libera o movimento
@@ -1503,104 +1457,10 @@ void ErrorCallback(int error, const char* description)
     fprintf(stderr, "ERROR: GLFW: %s\n", description);
 }
 
-// Esta função recebe um vértice com coordenadas de modelo p_model e passa o
-// mesmo por todos os sistemas de coordenadas armazenados nas matrizes model,
-// view, e projection; e escreve na tela as matrizes e pontos resultantes
-// dessas transformações.
-void TextRendering_ShowModelViewProjection(
-    GLFWwindow* window,
-    glm::mat4 projection,
-    glm::mat4 view,
-    glm::mat4 model,
-    glm::vec4 p_model
-)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    glm::vec4 p_world = model*p_model;
-    glm::vec4 p_camera = view*p_world;
-    glm::vec4 p_clip = projection*p_camera;
-    glm::vec4 p_ndc = p_clip / p_clip.w;
-
-    float pad = TextRendering_LineHeight(window);
-
-    TextRendering_PrintString(window, " Model matrix             Model     In World Coords.", -1.0f, 1.0f-pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, model, p_model, -1.0f, 1.0f-2*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-6*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-7*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-8*pad, 1.0f);
-
-    TextRendering_PrintString(window, " View matrix              World     In Camera Coords.", -1.0f, 1.0f-9*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, view, p_world, -1.0f, 1.0f-10*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-14*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-15*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-16*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Projection matrix        Camera                    In NDC", -1.0f, 1.0f-17*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductDivW(window, projection, p_camera, -1.0f, 1.0f-18*pad, 1.0f);
-
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    glm::vec2 a = glm::vec2(-1, -1);
-    glm::vec2 b = glm::vec2(+1, +1);
-    glm::vec2 p = glm::vec2( 0,  0);
-    glm::vec2 q = glm::vec2(width, height);
-
-    glm::mat4 viewport_mapping = Matrix(
-        (q.x - p.x)/(b.x-a.x), 0.0f, 0.0f, (b.x*p.x - a.x*q.x)/(b.x-a.x),
-        0.0f, (q.y - p.y)/(b.y-a.y), 0.0f, (b.y*p.y - a.y*q.y)/(b.y-a.y),
-        0.0f , 0.0f , 1.0f , 0.0f ,
-        0.0f , 0.0f , 0.0f , 1.0f
-    );
-
-    TextRendering_PrintString(window, "                                                       |  ", -1.0f, 1.0f-22*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .--------------------------'  ", -1.0f, 1.0f-23*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V                           ", -1.0f, 1.0f-24*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Viewport matrix           NDC      In Pixel Coords.", -1.0f, 1.0f-25*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductMoreDigits(window, viewport_mapping, p_ndc, -1.0f, 1.0f-26*pad, 1.0f);
-}
-
-// Escrevemos na tela os ângulos de Euler definidos nas variáveis globais
-// g_AngleX, g_AngleY, e g_AngleZ.
-void TextRendering_ShowEulerAngles(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float pad = TextRendering_LineHeight(window);
-
-    char buffer[80];
-    snprintf(buffer, 80, "Euler Angles rotation matrix = Z(%.2f)*Y(%.2f)*X(%.2f)\n", g_AngleZ, g_AngleY, g_AngleX);
-
-    TextRendering_PrintString(window, buffer, -1.0f+pad/10, -1.0f+2*pad/10, 1.0f);
-}
-
-// Escrevemos na tela qual matriz de projeção está sendo utilizada.
-void TextRendering_ShowProjection(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float lineheight = TextRendering_LineHeight(window);
-    float charwidth = TextRendering_CharWidth(window);
-
-    if ( g_UsePerspectiveProjection )
-        TextRendering_PrintString(window, "Perspective", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
-    else
-        TextRendering_PrintString(window, "Orthographic", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
-}
-
 // Escrevemos na tela o número de quadros renderizados por segundo (frames per
 // second).
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window)
 {
-    if ( !g_ShowInfoText )
-        return;
 
     // Variáveis estáticas (static) mantém seus valores entre chamadas
     // subsequentes da função!
@@ -1943,6 +1803,37 @@ void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec
         glUniform1i(g_object_id_uniform, GUN);
         DrawVirtualObject("AWP");
 }
+
+void RenderPlayer(glm::vec4 camera_position_c, glm::vec4 camera_view_vector, glm::vec4 camera_up_vector) {
+    // Desenhamos o modelo da arma
+    glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f);
+
+    // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera, mantendo o eixo Y constante
+    glm::vec4 forward = glm::normalize(camera_view_vector);
+    forward.y = 0.0f; // Manter o eixo Y constante
+    forward = glm::normalize(forward); // Normalizar novamente após ajustar o eixo Y
+
+    glm::vec4 right = crossproduct(camera_up_vector, forward); // Vetor 'right' do objeto
+    glm::vec4 up = crossproduct(forward, right); // Vetor 'up' do objeto alinhado com a câmera
+
+    glm::mat4 rotation_matrix = glm::mat4(
+        glm::vec4(right),
+        glm::vec4(up),
+        glm::vec4(forward),
+        glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+    );
+
+    glm::mat4 model = Matrix_Identity() *
+                        Matrix_Translate(object_position.x, object_position.y, object_position.z) *
+                        rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                        Matrix_Scale(0.01f, 0.01f, 0.01f);
+    
+    
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, MARIO);
+    DrawVirtualObject("Mario");
+}
+
 // Função para desenhar o alvo
 void DrawTarget(const Target& target) {
     if (target.IsAlive()) {
@@ -2013,9 +1904,13 @@ bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::ve
     float dy = targetNDCPos.y - ndcCenter.y;
     float distance = sqrt(dx * dx + dy * dy);
 
-    printf("Distance from NDC center: %f\n", distance);
+    // Consider the radius of the target in NDC
+    float targetRadiusNDC = 0.5f / clipSpacePos.w;
 
-    return distance < 0.10f;
+    //printf("Distance from NDC center: %f\n", distance);
+    //printf("Target radius in NDC: %f\n", targetRadiusNDC);
+
+    return distance < targetRadiusNDC;
 }
 
 // Função para gerar um número float aleatório entre min e max em intervalos de 0.5
@@ -2056,30 +1951,6 @@ void SpawnTarget_mov() {
     targets.push_back(newTarget);
 }
 
-void RenderPlayer(glm::vec4 camera_position_c, glm::vec4 camera_view_vector, glm::vec4 camera_up_vector) {
-    
-    // Calcular a direção para onde o jogador está olhando
-    glm::vec3 direction = glm::normalize(glm::vec3(camera_view_vector));
-    glm::vec3 up = glm::normalize(glm::vec3(camera_up_vector));
-    glm::vec3 right = glm::normalize(glm::cross(direction, up));
-    
-    glm::mat4 rotation_matrix = glm::mat4(
-        glm::vec4(right, 0.0f),
-        glm::vec4(up, 0.0f),
-        glm::vec4(direction, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
-        glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
-    );
-
-    glm::mat4 model = Matrix_Identity() *
-                        Matrix_Translate(camera_position_c.x, camera_position_c.y, camera_position_c.z) *
-                        rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
-                        Matrix_Scale(0.01f, 0.01f, 0.01f);
-    
-    
-    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, MARIO);
-    DrawVirtualObject("Mario");
-}
 void UpdateCountdown() {
     auto now = std::chrono::steady_clock::now();
     std::chrono::duration<float> elapsed = now - startTime;
