@@ -23,6 +23,8 @@ uniform mat4 projection;
 #define SPHERE_PARADA  1
 #define PLANE  2
 #define GUN 3
+#define PLANE_PAREDE 4
+#define MARIO 5
 
 uniform int object_id;
 
@@ -36,6 +38,9 @@ uniform sampler2D TextureImage0;
 uniform sampler2D TextureImage1;
 uniform sampler2D TextureImage2;
 uniform sampler2D TextureImage3;
+uniform sampler2D TextureImage4;
+uniform sampler2D TextureImage5;
+
 
 
 
@@ -65,7 +70,7 @@ void main()
     vec4 n = normalize(normal);
 
     // Vetor que define o sentido da fonte de luz em relação ao ponto atual.
-    vec4 l = normalize(vec4(1.0,1.0,0.0,0.0));
+    vec4 l = normalize(vec4(1.0,1.0,1.0,0.0));
 
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
@@ -113,14 +118,45 @@ void main()
 
         color.rgb = Kd1 * (lambert + 0.15);
     }
-    else if ( object_id == PLANE )
+    else if ( object_id == PLANE || object_id == PLANE_PAREDE)
     {
+        vec4 r = -l + 2*n*(l[0]*n[0] + l[1]*n[1] + l[2]*n[2] + l[3]*n[3]);
+        
+        vec3 Ks; // Refletância especular
+        vec3 Ka; // Refletância ambiente
+        float q; // Expoente especular para o modelo de iluminação de Phong
+        
+        Ks = vec3(0.8, 0.8, 0.8);
+        Ka = vec3(0.04,0.4,0.4);
+        q = 32.0;
+
         U = texcoords.x;
         V = texcoords.y;
+        vec3 Kd0;
 
-        vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
+        if(object_id == PLANE) {
+            Kd0 = texture(TextureImage0, vec2(U, V)).rgb;
+        } else {
+            
+            Kd0 = texture(TextureImage4, vec2(U, V)).rgb;
+        }
 
-         color.rgb = Kd0 * (lambert + 0.2);
+        // Espectro da fonte de iluminação
+        vec3 I = vec3(1.0, 1.0, 1.0); // PREENCH AQUI o espectro da fonte de luz
+
+        // Espectro da luz ambiente
+        vec3 Ia = vec3(0.2, 0.2, 0.2); // PREENCHA AQUI o espectro da luz ambiente
+
+        // Termo difuso utilizando a lei dos cossenos de Lambert
+        vec3 lambert_diffuse_term =  Kd0*I*max(0.5,(l[0]*n[0] + l[1]*n[1] + l[2]*n[2] + l[3]*n[3])); // PREENCHA AQUI o termo difuso de Lambert
+
+        // Termo ambiente
+        vec3 ambient_term = Ka*Ia; // PREENCHA AQUI o termo ambiente
+
+        // Termo especular utilizando o modelo de iluminação de Phong
+        vec3 phong_specular_term  = Ks*I*pow(max(0,(r[0]*v[0] + r[1]*v[1] + r[2]*v[2] + r[3]*v[3])),q); // PREENCH AQUI o termo especular de Phong
+
+        color.rgb = lambert_diffuse_term + phong_specular_term;
     }
 
     else if( object_id == SPHERE_PARADA)
@@ -165,6 +201,13 @@ void main()
 
          vec3 Kd1 = texture(TextureImage3, vec2(U,V)).rgb;
          color.rgb = Kd1 * (lambert + 0.15);
+    }
+    else if(object_id == MARIO){
+        U = texcoords.x;
+        V = texcoords.y;
+
+        vec3 Kd1 = texture(TextureImage5, vec2(U,V)).rgb;
+        color.rgb = Kd1 * (lambert + 0.15);
     }
 
 

@@ -20,8 +20,8 @@ public:
         map_.push_back(Matrix_Scale(7.0f, 2.0f, 0.1f) * Matrix_Translate(0.0f, 1.0f, -70.0f) * Matrix_Rotate_X(glm::radians(90.0f)));
         
         // Parede ao longo do eixo X (esquerda e direita)
-        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(70.0f, 1.0f, 0.0f) * Matrix_Rotate_Z(glm::radians(90.0f)));
-        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(-70.0f, 1.0f, 0.0f) * Matrix_Rotate_Z(glm::radians(90.0f)));
+        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(70.0f, 1.0f, 0.0f) * Matrix_Rotate_X(glm::radians(90.0f))* Matrix_Rotate_Z(glm::radians(90.0f)));
+        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(-70.0f, 1.0f, 0.0f)* Matrix_Rotate_X(glm::radians(90.0f)) * Matrix_Rotate_Z(glm::radians(90.0f)));
     }
     std::vector<glm::mat4> getModels(){ return map_;}
 
@@ -135,7 +135,7 @@ public:
     Player(int score) : score_(score) {}
 
     int getScore() const { return score_; }
-
+    void setScore(int score){score_ = score;}
     void addScore(int points) { score_ += points; }
 
     void resetScore() { score_ = 0; }

@@ -138,13 +138,17 @@ GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
 void LoadShader(const char* filename, GLuint shader_id); // Função utilizada pelas duas acima
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
+
 void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
 void DrawTarget(const Target& target); // Função para desenhar um alvo
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir, glm::mat4 view, glm::mat4 projection);
 void SpawnTarget();
+
+//funções de renderização de objetos controlados pelo jogador
 void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec4 camera_position_c);
+void RenderPlayer();
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
@@ -259,7 +263,7 @@ GLuint g_NumLoadedTextures = 0;
 // Lista de alvos
 std::vector<Target> targets;
 Player jogador;
-
+ //pontuacao
 int main(int argc, char* argv[])
 {
     // Criação de alguns alvos
@@ -361,6 +365,8 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/target_movimento.jpg");      // TextureImage1
     LoadTextureImage("../../data/target_parado.jpg");      // TextureImage2
     LoadTextureImage("../../data/Color.bmp");  //TextureImage3
+    LoadTextureImage("../../data/teste_parede.jpg");  //TextureImage4
+    LoadTextureImage("../../data/Mario_Albedo.png");  //TextureImage5
 
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
@@ -376,6 +382,10 @@ int main(int argc, char* argv[])
     ObjModel awpmodel("../../data/AWP_Dragon_Lore.obj");
     ComputeNormals(&awpmodel);
     BuildTrianglesAndAddToVirtualScene(&awpmodel);
+
+    ObjModel playermodel("../../data/Mario.obj");
+    ComputeNormals(&playermodel);
+    BuildTrianglesAndAddToVirtualScene(&playermodel);
     
     if ( argc > 1 )
     {
@@ -479,6 +489,8 @@ int main(int argc, char* argv[])
         #define SPHERE_PARADA 1
         #define PLANE  2
         #define GUN 3
+        #define PLANE_PAREDE 4
+        #define MARIO 5
         
         // Remove alvos expirados
         targets.erase(
@@ -498,9 +510,10 @@ int main(int argc, char* argv[])
             }
         }
 
+        RenderPlayer();
+
         RenderGun(camera_up_vector, camera_view_vector, camera_position_c);
        
-        
         RenderGameMap(gameMap, view, projection);
         
         // Copiado do FAQ
@@ -608,6 +621,8 @@ int main(int argc, char* argv[])
         drawCrosshair(g_GpuProgramID_crosshair);
         glEnable(GL_DEPTH_TEST);
 
+        std::string scoreAtual = "Scored Points:" + std::to_string(jogador.getScore());
+        TextRendering_PrintString(window,scoreAtual,-0.95f,0.9f,3.0f);
         // O framebuffer onde OpenGL executa as operações de renderização não
         // é o mesmo que está sendo mostrado para o usuário, caso contrário
         // seria possível ver artefatos conhecidos como "screen tearing". A
@@ -764,6 +779,8 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage2"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage3"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage4"), 4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage5"), 5);
     glUseProgram(0);
 }
 
@@ -1804,9 +1821,15 @@ void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
 
      std::vector<glm::mat4> modelos = gameMap.getModels();
 
-    for(glm::mat4 model : modelos){
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
+    for(size_t i = 0; i < modelos.size(); ++i){
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(modelos[i]));
+
+        if(i != 0){
+            glUniform1i(g_object_id_uniform, PLANE_PAREDE);
+        } else {
+            glUniform1i(g_object_id_uniform, PLANE);
+        }
+        
         DrawVirtualObject("the_plane");
     }
 
@@ -1868,6 +1891,9 @@ void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 vi
     for (auto& target : targets) {
         if (IsTargetHit(target, cameraPosition, rayDirection, view, projection)) {
             target.Hit();
+            if(target.GetHealth() <= 0){
+                jogador.addScore(10 + 10*target.GetType());
+            }
             break;
         }
     }
@@ -1934,4 +1960,11 @@ void SpawnTarget() {
 
     // Adiciona o novo alvo à lista de alvos
     targets.push_back(newTarget);
+}
+
+void RenderPlayer(){
+        glm::mat4 model = Matrix_Identity()*Matrix_Scale(0.01,0.01,0.01);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, MARIO);
+        DrawVirtualObject("Mario");
 }
