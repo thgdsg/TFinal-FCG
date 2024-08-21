@@ -4,56 +4,30 @@
 #include <chrono>
 #include <random>
 #include <cmath>
+#include <glm/mat4x4.hpp>
+#include "matrices.h"
 
 class GameMap {
 public:
-    GameMap(int width, int height) : width_(width), height_(height) {
-        map_.resize(width * height, ' ');
-    }
+    GameMap(){
 
-    void AddWall(int x, int y, char direction) {
-        if (IsValidPosition(x, y)) {
-            if (direction == 'H') {
-                map_[y * width_ + x] = '#'; // Parede horizontal
-            } else if (direction == 'V') {
-                map_[y * width_ + x] = '@'; // Parede vertical
-            }
-        }
-    }
+        //matriz modelo padrao do the_plane
+        glm::mat4 model = Matrix_Identity();
 
-    void AddFloor(int x, int y) {
-        if (IsValidPosition(x, y)) {
-            map_[y * width_ + x] = '.';
-        }
+        //coloca o chão
+        map_.push_back(model*Matrix_Scale(7,0,7));
+        // Paredes verticais
+        map_.push_back(Matrix_Scale(7.0f, 2.0f, 0.1f) * Matrix_Translate(0.0f, 1.0f, 70.0f) * Matrix_Rotate_X(glm::radians(90.0f)));
+        map_.push_back(Matrix_Scale(7.0f, 2.0f, 0.1f) * Matrix_Translate(0.0f, 1.0f, -70.0f) * Matrix_Rotate_X(glm::radians(90.0f)));
+        
+        // Parede ao longo do eixo X (esquerda e direita)
+        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(70.0f, 1.0f, 0.0f) * Matrix_Rotate_X(glm::radians(90.0f))* Matrix_Rotate_Z(glm::radians(90.0f)));
+        map_.push_back(Matrix_Scale(0.1f, 2.0f, 7.0f) * Matrix_Translate(-70.0f, 1.0f, 0.0f)* Matrix_Rotate_X(glm::radians(90.0f)) * Matrix_Rotate_Z(glm::radians(90.0f)));
     }
-
-    void PrintMap() const {
-        for (int y = 0; y < height_; ++y) {
-            for (int x = 0; x < width_; ++x) {
-                std::cout << GetCell(x, y);
-            }
-            std::cout << std::endl;
-        }
-    }
-
-    bool IsValidPosition(int x, int y) const {
-        return x >= 0 && x < width_ && y >= 0 && y < height_;
-    }
-    
-    char GetCell(int x, int y) const {
-        if (IsValidPosition(x, y)) {
-            return map_[y * width_ + x];
-        }
-        return ' ';
-    }
-
-    int GetWidth() const { return width_; }
-    int GetHeight() const { return height_; }
+    std::vector<glm::mat4> getModels(){ return map_;}
 
 private:
-    int width_;
-    int height_;
-    std::vector<char> map_;
+    std::vector<glm::mat4> map_;
 };
 
 class Target {
@@ -97,6 +71,11 @@ public:
     float GetLifetime() const { return lifetime_; }
     int GetType()const { return type_; }
 
+    // Métodos de modificação
+    void SetX(float x) { x_ = x; }
+    void SetY(float y) { y_ = y; }
+    void SetZ(float z) { z_ = z; }
+    
     // Método para verificar se o alvo ainda está vivo
     bool IsAlive() const {
         auto now = std::chrono::steady_clock::now();
@@ -157,25 +136,16 @@ private:
 
 class Player {
 public:
-    Player() : x_(0), y_(0), z_(0), score_(0) {}
+    Player() : score_(0) {}
 
-    Player(float x, float y, float z, int score) : x_(x), y_(y), z_(z), score_(score) {}
-
-    float getX() const { return x_; }
-    float getY() const { return y_; }
-    float getZ() const { return z_; }
-
-    void setX(float x) { x_ = x; }
-    void setY(float y) { y_ = y; }
-    void setZ(float z) { z_ = z; }
+    Player(int score) : score_(score) {}
 
     int getScore() const { return score_; }
-
+    void setScore(int score){score_ = score;}
     void addScore(int points) { score_ += points; }
 
     void resetScore() { score_ = 0; }
 
 private:
-    float x_, y_, z_; // Posição no mundo
-    int score_; // Pontuação do jogador
+    int score_;
 };

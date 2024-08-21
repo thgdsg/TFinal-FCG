@@ -48,6 +48,8 @@
 #include "utils.h"
 #include "matrices.h"
 #include "classes.h"
+#include <iostream>
+#include <iomanip>
 
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
@@ -108,6 +110,49 @@ struct ObjModel
     }
 };
 
+bool CheckCollisionWithSphere(const glm::vec4& cameraPos, const Target& target) {
+    // Calcular a diferença entre os componentes dos vetores
+    float dx = cameraPos.x - target.GetX();
+    float dy = cameraPos.y - target.GetY();
+    float dz = cameraPos.z - target.GetZ();
+
+    // Calcular a distância euclidiana
+    float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+    // Verificar se a distância é menor ou igual a 0.5
+    return distance <= 1;
+}
+
+// Função para detectar colisão da câmera com as paredes do cenário
+bool CheckCollisionWithWorld(const glm::vec4& cameraPosition) {
+    const float minX = -6.8f;
+    const float maxX = 6.8f;
+    const float minZ = -6.8f;
+    const float maxZ = 6.8f;
+
+    if (cameraPosition.x < minX || cameraPosition.x > maxX ||
+        cameraPosition.z < minZ || cameraPosition.z > maxZ) {
+        return true; // Colisão detectada
+    }
+    return false; // Nenhuma colisão detectada
+}
+
+// Função para detectar colisão de um Target com as paredes do cenário
+bool CheckTargetCollisionWithWorld(const Target& target) {
+    // Definir os limites do cenário
+    const float minX = -6.8f;
+    const float maxX = 6.8f;
+    const float minZ = -6.8f;
+    const float maxZ = 6.8f;
+
+    // Verificar se a posição do Target está fora dos limites do cenário
+    if (target.GetX() - 0.5f < minX || target.GetX() + 0.5f > maxX ||
+        target.GetZ() - 0.5f < minZ || target.GetZ() + 0.5f > maxZ) {
+        return true; // Colisão detectada
+    }
+    return false; // Nenhuma colisão detectada
+}
+
 //  Função para desenhar o crosshair
 void drawCrosshair(GLuint shaderProgram);
 void LoadCrosshairShader();
@@ -121,7 +166,8 @@ void LoadTextureImage(const char* filename);
 // Checa colisão do jogador com as bordas do mapa
 bool CheckCollisionWithMap(const GameMap& gameMap, float playerX, float playerZ);
 bool CheckCollisionWithSphere(const glm::vec4& cameraPos, const Target& target);
-
+bool CheckCollisionWithWorld(const glm::vec4& cameraPosition);
+bool CheckTargetCollisionWithWorld(const Target& target);
 // Declaração de funções utilizadas para pilha de matrizes de modelagem.
 void PushMatrix(glm::mat4 M);
 void PopMatrix(glm::mat4& M);
@@ -137,14 +183,20 @@ GLuint LoadShader_Fragment(const char* filename); // Carrega um fragment shader
 void LoadShader(const char* filename, GLuint shader_id); // Função utilizada pelas duas acima
 GLuint CreateGpuProgram(GLuint vertex_shader_id, GLuint fragment_shader_id); // Cria um programa de GPU
 void PrintObjModelInfo(ObjModel*); // Função para debugging
-void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
-void CriaMapa(GameMap& gameMap); // Função para criar o mapa
+
+void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection); // Função para renderizar o mapa
 void DrawTarget(const Target& target); // Função para desenhar um alvo
 void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 glm::vec4 ScreenToWorld(GLFWwindow* window, double xpos, double ypos, glm::mat4 view, glm::mat4 projection);
 bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::vec4& rayDir, glm::mat4 view, glm::mat4 projection);
 void SpawnTarget();
+void SpawnTarget_mov();
+float RandomFloat(float min, float max);
+void UpdateCountdown();
 
+//funções de renderização de objetos controlados pelo jogador
+void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec4 camera_position_c);
+void RenderPlayer(glm::vec4 camera_position_c, glm::vec4 camera_view_vector, glm::vec4 camera_up_vector);
 
 // Declaração de funções auxiliares para renderizar texto dentro da janela
 // OpenGL. Estas funções estão definidas no arquivo "textrendering.cpp".
@@ -219,7 +271,10 @@ double g_LastCursorPosX, g_LastCursorPosY;
 double g_LastClickTime = 0.0;
 const double DMG_COOLDOWN = 0.1;
 double lastSpawnTime = 0.0;
+double lastSpawnTime2 = 0.0;
 double lastShotTime = 0.0;
+int countdownTime = 60;
+auto startTime = std::chrono::steady_clock::now();
 
 // Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
 // usuário através do mouse (veja função CursorPosCallback()). A posição
@@ -231,14 +286,15 @@ float g_CameraDistance = 3.5f; // Distância da câmera para a origem
 
 // Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
 bool g_UsePerspectiveProjection = true;
+bool g_ThirdPersonCamera = false;
 
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
 
 //variavel que controla o movimento
-bool PRESS_W = false, PRESS_A = false, PRESS_S = false, PRESS_D = false, PRESS_SHIFT = false;
+bool PRESS_W = false, PRESS_A = false, PRESS_S = false, PRESS_D = false, PRESS_SHIFT = false, PRESS_R = false;
 bool press_space = false, press_p = false;
-
+bool fim_jogo = false;
 // Variáveis que definem um programa de GPU (shaders). Veja função LoadShadersFromFiles().
 GLuint g_GpuProgramID_obj = 0;
 GLint g_model_uniform;
@@ -259,7 +315,7 @@ GLuint g_NumLoadedTextures = 0;
 // Lista de alvos
 std::vector<Target> targets;
 Player jogador;
-
+ //pontuacao
 int main(int argc, char* argv[])
 {
     // Criação de alguns alvos
@@ -280,8 +336,7 @@ int main(int argc, char* argv[])
     float jump_force = 5.0f;
 
     // Criação do GameMap
-    GameMap gameMap(10, 10);
-    CriaMapa(gameMap);
+    GameMap gameMap;
 
 
     // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
@@ -362,6 +417,8 @@ int main(int argc, char* argv[])
     LoadTextureImage("../../data/target_movimento.jpg");      // TextureImage1
     LoadTextureImage("../../data/target_parado.jpg");      // TextureImage2
     LoadTextureImage("../../data/Color.bmp");  //TextureImage3
+    LoadTextureImage("../../data/teste_parede.jpg");  //TextureImage4
+    LoadTextureImage("../../data/Mario_Albedo.png");  //TextureImage5
 
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
@@ -377,6 +434,10 @@ int main(int argc, char* argv[])
     ObjModel awpmodel("../../data/AWP_Dragon_Lore.obj");
     ComputeNormals(&awpmodel);
     BuildTrianglesAndAddToVirtualScene(&awpmodel);
+
+    ObjModel playermodel("../../data/Mario.obj");
+    ComputeNormals(&playermodel);
+    BuildTrianglesAndAddToVirtualScene(&playermodel);
     
     if ( argc > 1 )
     {
@@ -410,10 +471,11 @@ int main(int argc, char* argv[])
     glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
     glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
     glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+    glm::vec4 camera_position_third_person;
 
     // Novo vetor, velocidade da câmera 
     glm::vec4 camera_velocity   = glm::vec4(0.0f,0.0f,0.0f,0.0f);
-
+    startTime = std::chrono::steady_clock::now();
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
     {
@@ -435,9 +497,29 @@ int main(int argc, char* argv[])
         // os shaders de vértice e fragmentos).
         glUseProgram(g_GpuProgramID_obj);
 
-        // Computamos a matriz "View" utilizando os parâmetros da câmera para
-        // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::mat4 view = Matrix_Camera_View(camera_position_c,camera_view_vector, camera_up_vector);
+        glm::mat4 view;
+        if (g_ThirdPersonCamera)
+        {
+            // Distância da câmera em terceira pessoa
+            float third_person_distance = 1.0f;
+
+            // Calcule a posição da câmera em terceira pessoa
+            camera_position_third_person = camera_position_c - third_person_distance * (camera_view_vector/norm(camera_view_vector));
+            camera_position_third_person.y += 1.0f; // Ajuste a altura da câmera em terceira pessoa
+            camera_position_third_person.x -= 0.5f; 
+            // Verifique se a câmera está abaixo da altura mínima permitida
+            if (camera_position_third_person.y < 0.5f)
+            {
+                camera_position_third_person.y = 0.5f;
+            }
+
+            view = Matrix_Camera_View(camera_position_third_person, camera_view_vector, camera_up_vector);
+            RenderPlayer(camera_position_c, camera_view_vector, camera_up_vector);
+        }
+        else
+        {
+            view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+        }
 
         // Agora computamos a matriz de Projeção.
         glm::mat4 projection;
@@ -447,26 +529,11 @@ int main(int argc, char* argv[])
         float nearplane = -0.01f;  // Posição do "near plane"
         float farplane  = -30.0f; // Posição do "far plane"
 
-        if (g_UsePerspectiveProjection)
-        {
-            // Projeção Perspectiva.
-            // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
-            float field_of_view = 3.141592 / 2.5f;
-            projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
-        }
-        else
-        {
-            // Projeção Ortográfica.
-            // Para definição dos valores l, r, b, t ("left", "right", "bottom", "top"),
-            // PARA PROJEÇÃO ORTOGRÁFICA veja slides 219-224 do documento Aula_09_Projecoes.pdf.
-            // Para simular um "zoom" ortográfico, computamos o valor de "t"
-            // utilizando a variável g_CameraDistance.
-            float t = 1.5f*g_CameraDistance/2.5f;
-            float b = -t;
-            float r = t*g_ScreenRatio;
-            float l = -r;
-            projection = Matrix_Orthographic(l, r, b, t, nearplane, farplane);
-        }
+        // Projeção Perspectiva.
+        // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
+        float field_of_view = 3.141592 / 2.5f;
+        projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
+
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
@@ -480,6 +547,8 @@ int main(int argc, char* argv[])
         #define SPHERE_PARADA 1
         #define PLANE  2
         #define GUN 3
+        #define PLANE_PAREDE 4
+        #define MARIO 5
         
         // Remove alvos expirados
         targets.erase(
@@ -496,44 +565,38 @@ int main(int argc, char* argv[])
                     target.UpdatePosition();
                 }
                 DrawTarget(target);
+                if (CheckCollisionWithSphere(camera_position_c, target)) {
+                    // Calcule a direção oposta à colisão
+                    glm::vec4 posicao_target = glm::vec4(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
+                    glm::vec4 direction = (camera_position_c - posicao_target)/(norm(camera_position_c - posicao_target));
+                    
+                    // Mova a câmera na direção oposta até que não haja mais colisão
+                    while (CheckCollisionWithSphere(camera_position_c, target)) {
+                        camera_position_c += glm::vec4(direction.x * 0.01f, direction.y * 0.01f, direction.z * 0.01f, 0.0f); // Ajuste o valor 0.01f conforme necessário
+                    }
+                }
             }
-            if (CheckCollisionWithSphere(camera_position_c, target)) {
-                // Calcule a direção oposta à colisão
-                glm::vec4 posicao_target = glm::vec4(target.GetX(), target.GetY(), target.GetZ(), 1.0f);
-                glm::vec4 direction = (camera_position_c - posicao_target)/(norm(camera_position_c - posicao_target));
-                
-                // Mova a câmera na direção oposta até que não haja mais colisão
-                while (CheckCollisionWithSphere(camera_position_c, target)) {
-                    camera_position_c += glm::vec4(direction.x * 0.01f, direction.y * 0.01f, direction.z * 0.01f, 0.0f); // Ajuste o valor 0.01f conforme necessário
+            if(CheckTargetCollisionWithWorld(target)){
+                // Empurrar o Target na direção oposta à colisão
+                float pushDistance = 0.5f;
+
+                // Verificar em qual direção o Target está colidindo e empurrá-lo na direção oposta
+                if (target.GetX() - 0.5f < -6.8f) {
+                    target.SetX(-6.8f + 0.5f + pushDistance);
+                } else if (target.GetX() + 0.5f > 6.8f) {
+                    target.SetX(6.8f - 0.5f - pushDistance);
+                }
+
+                if (target.GetZ() - 0.5f < -6.8f) {
+                    target.SetZ(-6.8f + 0.5f + pushDistance);
+                } else if (target.GetZ() + 0.5f > 6.8f) {
+                    target.SetZ(6.8f - 0.5f - pushDistance);
                 }
             }
         }
-        // Desenhamos o modelo da arma
-        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
-        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
 
-        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
-        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
-        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
-        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
-
-        glm::mat4 rotation_matrix = glm::mat4(
-            glm::vec4(right, 0.0f),
-            glm::vec4(up, 0.0f),
-            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
-            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
-        );
-
-        model = Matrix_Identity() *
-                Matrix_Translate(object_position.x, object_position.y, object_position.z) *
-                rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
-                Matrix_Scale(0.025, 0.025, 0.025);
-
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, GUN);
-        DrawVirtualObject("AWP");
-
-        
+        RenderGun(camera_up_vector, camera_view_vector, camera_position_c);
+       
         RenderGameMap(gameMap, view, projection);
         
         // Copiado do FAQ
@@ -553,14 +616,24 @@ int main(int argc, char* argv[])
         // Direção (para normalizar o movimento diagonal)
         glm::vec4 direction(0.0f);
 
-        // Verifica se 5 segundos se passaram
-        if (current_time - lastSpawnTime >= 5.0)
-        {
-            // Chame a função SpawnTarget
-            SpawnTarget();
+        if(!fim_jogo){
+            // Verifica se 5 segundos se passaram
+            if (current_time - lastSpawnTime >= RandomFloat(2.0f, 4.0f))
+            {
+                // Chame a função SpawnTarget
+                SpawnTarget();
 
-            // Atualize o tempo da última chamada
-            lastSpawnTime = current_time;
+                // Atualize o tempo da última chamada
+                lastSpawnTime = current_time;
+            }
+            if (current_time - lastSpawnTime2 >= RandomFloat(6.0f, 10.0f))
+            {
+                // Chame a função SpawnTarget
+                SpawnTarget_mov();
+
+                // Atualize o tempo da última chamada
+                lastSpawnTime2 = current_time;
+            }
         }
 
         if(PRESS_W)
@@ -586,13 +659,15 @@ int main(int argc, char* argv[])
             camera_position_c += (camera_speed/2.0f) * delta_t * direction;
         }
 
-        jogador.setX(camera_position_c.x);
-        jogador.setY(camera_position_c.y);
-        jogador.setZ(camera_position_c.z);
-
-        if(press_p)
-            gameMap.PrintMap();
-
+        if(CheckCollisionWithWorld(camera_position_c)){
+            camera_position_c -= camera_speed * delta_t * direction;
+        }
+        if(PRESS_R){
+            startTime = std::chrono::steady_clock::now();
+            fim_jogo = false;
+            jogador.resetScore();
+        }
+        
         if(g_LeftMouseButtonPressed){
             if (current_time - lastShotTime >= 0.5) {
                 lastShotTime = current_time;
@@ -647,6 +722,16 @@ int main(int argc, char* argv[])
         drawCrosshair(g_GpuProgramID_crosshair);
         glEnable(GL_DEPTH_TEST);
 
+        std::string scoreAtual = "Pontos: " + std::to_string(jogador.getScore());
+        TextRendering_PrintString(window,scoreAtual,-0.95f,0.9f,3.0f);
+        UpdateCountdown();
+        std::string tempo_restante = "Tempo Restante: " + std::to_string(countdownTime);
+        TextRendering_PrintString(window,tempo_restante,-0.95f,0.7f,3.0f);
+
+        if(fim_jogo){
+            std::string fim = "Fim de Jogo!\nPressione 'R' para reiniciar!";
+            TextRendering_PrintString(window,fim,-0.95f,0.5f,3.0f);
+        }
         // O framebuffer onde OpenGL executa as operações de renderização não
         // é o mesmo que está sendo mostrado para o usuário, caso contrário
         // seria possível ver artefatos conhecidos como "screen tearing". A
@@ -803,6 +888,8 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage1"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage2"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage3"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage4"), 4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID_obj, "TextureImage5"), 5);
     glUseProgram(0);
 }
 
@@ -1328,28 +1415,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
 
-    // O código abaixo implementa a seguinte lógica:
-    //   Se apertar tecla X       então g_AngleX += delta;
-    //   Se apertar tecla shift+X então g_AngleX -= delta;
-    //   Se apertar tecla Y       então g_AngleY += delta;
-    //   Se apertar tecla shift+Y então g_AngleY -= delta;
-    //   Se apertar tecla Z       então g_AngleZ += delta;
-    //   Se apertar tecla shift+Z então g_AngleZ -= delta;
-
-    float delta = 3.141592 / 16; // 22.5 graus, em radianos.
-
-    if (key == GLFW_KEY_X && action == GLFW_PRESS)
+    // Troca a câmera pra 3a pessoa (lookat)
+    if (key == GLFW_KEY_L && action == GLFW_PRESS)
     {
-        g_AngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-    }
-
-    if (key == GLFW_KEY_Y && action == GLFW_PRESS)
-    {
-        g_AngleY += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
-    }
-    if (key == GLFW_KEY_Z && action == GLFW_PRESS)
-    {
-        g_AngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
+        g_ThirdPersonCamera = !g_ThirdPersonCamera;
     }
 
     // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
@@ -1359,27 +1428,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
             press_space = true;
         else if (action == GLFW_RELEASE)
             press_space = false;
-    }
-
-    // (DEBUG) Se o usuário apertar P, printa o mapa do jogo no terminal
-    if (key == GLFW_KEY_P)
-    {
-        if (action == GLFW_PRESS)
-            press_p = true;
-        else if (action == GLFW_RELEASE)
-            press_p = false;
-    }
-
-    // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
-    if (key == GLFW_KEY_P && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = true;
-    }
-
-    // Se o usuário apertar a tecla O, utilizamos projeção ortográfica.
-    if (key == GLFW_KEY_O && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = false;
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
@@ -1417,6 +1465,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         PRESS_SHIFT = true;
     }
+    if (key == GLFW_KEY_R && action == GLFW_PRESS)
+    {
+        PRESS_R = true;
+    }
 
     //ve se libera o movimento
     if (key == GLFW_KEY_W && action == GLFW_RELEASE)
@@ -1438,6 +1490,10 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_LEFT_SHIFT && action == GLFW_RELEASE)
     {
         PRESS_SHIFT = false;
+    }
+    if (key == GLFW_KEY_R && action == GLFW_RELEASE)
+    {
+        PRESS_R = false;
     }
 }
 
@@ -1834,73 +1890,59 @@ void drawCrosshair(GLuint shaderProgram) {
     glBindVertexArray(0);
 
 }
-// set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
-// vim: set spell spelllang=pt_br :
-
-void CriaMapa(GameMap& gameMap){
-    // Mapa do jogo (ex. para nosso jogo)
-    for (int i = 0; i < 10; i++) {
-            gameMap.AddWall(i, 0, 'H');
-        }
-    for (int i = 1; i < 10; i++) {
-            gameMap.AddWall(i, 9, 'H');
-        }
-    for (int j = 1; j < 10; j++) {
-        gameMap.AddWall(0, j, 'V');
-    }
-    for (int j = 1; j < 10; j++) {
-        gameMap.AddWall(9, j, 'V');
-    }
-    for (int i = 1; i < 9; i++) {
-        for (int j = 1; j < 9; j++) {
-            gameMap.AddFloor(i, j);
-        }
-    }
-}
-
-// Função para desenhar o chão ou parede
-void DrawCell(float x, float y, float size, char direction) {
-    glm::mat4 model = glm::mat4(1.0f);
-    model = Matrix_Translate(x - 5.0f, 0.0f, y - 5.0f) * Matrix_Scale(size, size, size);
-
-    if (direction == 'H') {
-        model *= Matrix_Rotate_Z(3.141592f/2) * Matrix_Rotate_Y(0) * Matrix_Rotate_X(3.141592f/2);
-    } else if (direction == 'V') {
-        model *= Matrix_Rotate_Z(3.141592f/2) * Matrix_Rotate_Y(0) * Matrix_Rotate_X(3.141592f);
-    }
-    
-    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, PLANE);
-    DrawVirtualObject("the_plane");
-}
 
 // Função para renderizar o mapa
-void RenderGameMap(const GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
+void RenderGameMap(GameMap& gameMap, glm::mat4 view, glm::mat4 projection) {
     glUseProgram(g_GpuProgramID_obj);
-
     glUniformMatrix4fv(g_view_uniform, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(g_projection_uniform, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // Itera sobre cada célula do GameMap
-    for (int y = 0; y < gameMap.GetHeight(); ++y) {
-        for (int x = 0; x < gameMap.GetWidth(); ++x) {
-            char cell = gameMap.GetCell(x, y);
-            if (cell == '#') {
-                // Desenha uma parede horizontal
-                DrawCell(x * 2, y * 2, 5.0f, 'H');
-            } else if (cell == '@') {
-                // Desenha uma parede vertical
-                DrawCell(x * 2, y * 2, 5.0f, 'V');
-            } else if (cell == '.') {
-                // Desenha o chão
-                DrawCell(x * 2, y * 2, 2.0f, ' ');
-            }
+    std::vector<glm::mat4> modelos = gameMap.getModels();
+
+    for(size_t i = 0; i < modelos.size(); ++i){
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(modelos[i]));
+
+        if(i != 0){
+            glUniform1i(g_object_id_uniform, PLANE_PAREDE);
+        } else {
+            glUniform1i(g_object_id_uniform, PLANE);
         }
+        
+        DrawVirtualObject("the_plane");
     }
+
+
     // Desative o shader program se necessário
     glUseProgram(0);
 }
 
+// Função para renderizar a arma
+void RenderGun(glm::vec4 camera_up_vector, glm::vec4 camera_view_vector,glm::vec4 camera_position_c){
+    // Desenhamos o modelo da arma
+        glm::vec4 camera_right = glm::vec4(glm::normalize(glm::cross(glm::vec3(camera_up_vector), glm::vec3(camera_view_vector))), 0.0f); // Calcula a direção "direita" da câmera, com w = 0
+        glm::vec4 object_position = glm::vec4(camera_position_c.x, camera_position_c.y - 0.5, camera_position_c.z,1.0f) + (-camera_right*0.2f); // Define a posição do objeto para a direita da câmera
+
+        // Criar uma matriz de rotação para alinhar o objeto com a direção da câmera
+        glm::vec3 forward = glm::normalize(glm::vec3(camera_view_vector)); // Direção para onde a câmera está apontando
+        glm::vec3 right = glm::normalize(glm::cross(glm::vec3(camera_up_vector), forward)); // Vetor 'right' do objeto
+        glm::vec3 up = glm::cross(forward, right); // Vetor 'up' do objeto alinhado com a câmera
+
+        glm::mat4 rotation_matrix = glm::mat4(
+            glm::vec4(right, 0.0f),
+            glm::vec4(up, 0.0f),
+            glm::vec4(forward, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
+            glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+        );
+
+        glm::mat4 model = Matrix_Identity() *
+                            Matrix_Translate(object_position.x, object_position.y, object_position.z) *
+                            rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                            Matrix_Scale(0.025, 0.025, 0.025);
+
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, GUN);
+        DrawVirtualObject("AWP");
+}
 // Função para desenhar o alvo
 void DrawTarget(const Target& target) {
     if (target.IsAlive()) {
@@ -1915,7 +1957,7 @@ void DrawTarget(const Target& target) {
             glUniform1i(g_object_id_uniform, SPHERE_PARADA);
         }
     
-         
+
         DrawVirtualObject("the_sphere"); 
     }
 }
@@ -1927,6 +1969,9 @@ void HandleMouseClick(GLFWwindow* window, double xpos, double ypos, glm::mat4 vi
     for (auto& target : targets) {
         if (IsTargetHit(target, cameraPosition, rayDirection, view, projection)) {
             target.Hit();
+            if(target.GetHealth() <= 0){
+                jogador.addScore(10 + 10*target.GetType());
+            }
             break;
         }
     }
@@ -1970,7 +2015,7 @@ bool IsTargetHit(const Target& target, const glm::vec4& cameraPos, const glm::ve
 
     printf("Distance from NDC center: %f\n", distance);
 
-    return distance < 0.1f;
+    return distance < 0.10f;
 }
 
 // Função para gerar um número float aleatório entre min e max em intervalos de 0.5
@@ -1984,13 +2029,65 @@ void SpawnTarget() {
     srand(static_cast<unsigned int>(time(0)));
 
     // Gera coordenadas aleatórias para x e z
-    float x = RandomFloat(-5.0f, 5.0f);
-    float z = RandomFloat(-5.0f, 5.0f);
-    float y = 1.0f; // Altura fixa
+    float x = RandomFloat(-6.0f, 6.0f);
+    float z = RandomFloat(-6.0f, 6.0f);
+    float y = RandomFloat(1.0f, 4.0f); // Altura fixa
 
     // Cria um novo alvo
-    Target newTarget(x, y, z, 1, 10,1,0);
+    Target newTarget(x, y, z, 1, RandomFloat(5.0f,15.0f),1,0);
 
     // Adiciona o novo alvo à lista de alvos
     targets.push_back(newTarget);
+}
+
+// Função para spawnar um alvo (em movimento) em uma posição aleatória
+void SpawnTarget_mov() {
+    srand(static_cast<unsigned int>(time(0)));
+
+    // Gera coordenadas aleatórias para x e z
+    float x = RandomFloat(-6.0f, 6.0f);
+    float z = RandomFloat(-6.0f, 6.0f);
+    float y = RandomFloat(1.0f, 4.0f); // Altura muda
+
+    // Cria um novo alvo
+    Target newTarget(x, y, z, 1, RandomFloat(10.0f,15.0f),1,1);
+
+    // Adiciona o novo alvo à lista de alvos
+    targets.push_back(newTarget);
+}
+
+void RenderPlayer(glm::vec4 camera_position_c, glm::vec4 camera_view_vector, glm::vec4 camera_up_vector) {
+    
+    // Calcular a direção para onde o jogador está olhando
+    glm::vec3 direction = glm::normalize(glm::vec3(camera_view_vector));
+    glm::vec3 up = glm::normalize(glm::vec3(camera_up_vector));
+    glm::vec3 right = glm::normalize(glm::cross(direction, up));
+    
+    glm::mat4 rotation_matrix = glm::mat4(
+        glm::vec4(right, 0.0f),
+        glm::vec4(up, 0.0f),
+        glm::vec4(direction, 0.0f), // Negativo para alinhar a frente do objeto com a direção da câmera
+        glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)
+    );
+
+    glm::mat4 model = Matrix_Identity() *
+                        Matrix_Translate(camera_position_c.x, camera_position_c.y, camera_position_c.z) *
+                        rotation_matrix * // Aplica a rotação para alinhar com a direção da câmera
+                        Matrix_Scale(0.01f, 0.01f, 0.01f);
+    
+    
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, MARIO);
+    DrawVirtualObject("Mario");
+}
+void UpdateCountdown() {
+    auto now = std::chrono::steady_clock::now();
+    std::chrono::duration<float> elapsed = now - startTime;
+    countdownTime = 60 - static_cast<int>(elapsed.count());
+    if (countdownTime < 0) {
+        countdownTime = 0;
+    }
+    if (countdownTime == 0) {
+        fim_jogo = true;
+    }
 }
